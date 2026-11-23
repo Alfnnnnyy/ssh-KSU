@@ -30,12 +30,9 @@
   }: Props = $props();
 
   let secretInput = $state('');
-
-  const playitBadge = $derived(
-    status.playitLinked
-      ? (status.playitRunning ? `ONLINE (${status.playitPhase})` : 'LINKED (OFF)')
-      : 'BELUM LINK'
-  );
+  const configured = $derived(status.playitLinked && status.publicAddr.trim().includes(':'));
+  let expanded = $state(false);
+  const showSetup = $derived(!configured || expanded);
 
   async function saveManualSecret() {
     if (await onSetSecret(secretInput)) {
@@ -46,15 +43,98 @@
 
 <section class="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3.5 flex flex-col gap-2.5">
   <div class="flex items-center justify-between gap-2">
-    <h2 class="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Tunnel Jarak Jauh (playit.gg)</h2>
-    <span class="font-mono text-xs text-[var(--muted)]">{playitBadge}</span>
+    <div>
+      <h2 class="m-0 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Akses Beda Negara (playit.gg)</h2>
+      {#if configured}
+        <p class="m-0 mt-0.5 font-mono text-xs text-[var(--fg)]">{status.publicAddr}</p>
+      {/if}
+    </div>
+    {#if configured}
+      <button
+        type="button"
+        onclick={() => (expanded = !expanded)}
+        class="min-h-11 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)]"
+      >
+        {expanded ? 'Tutup' : 'Ubah'}
+      </button>
+    {/if}
   </div>
 
-  <div class="flex flex-col gap-1">
-    <label class="text-xs text-[var(--muted)]" for="pub-addr">Alamat Publik Tunnel (host:port dari dashboard playit.gg)</label>
+  {#if showSetup}
+    {#if !status.playitLinked}
+      <div class="flex flex-col gap-2">
+        <p class="m-0 text-xs text-[var(--muted)]">
+          Langkah 1: Hubungkan HP ini ke akun playit.gg (gratis, 1 kali saja).
+        </p>
+        <button
+          type="button"
+          disabled={busy}
+          onclick={onClaimStart}
+          class="min-h-11 w-full rounded-[10px] bg-[var(--accent)] px-3.5 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
+        >
+          Link Playit.gg
+        </button>
+
+        {#if claim}
+          <div class="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-2.5 flex flex-col gap-2">
+            <p class="m-0 text-xs text-[var(--muted)]">Buka tautan di browser lalu setujui agent, kemudian klik Selesai:</p>
+            <div class="flex items-center gap-2">
+              <input
+                type="text"
+                readonly
+                value={claim.url}
+                class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 font-mono text-xs text-[var(--fg)]"
+              />
+              <button
+                type="button"
+                onclick={() => onCopy(claim.url, 'Link Claim')}
+                class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)]"
+              >
+                Copy
+              </button>
+            </div>
+            <button
+              type="button"
+              disabled={busy}
+              onclick={onClaimFinish}
+              class="min-h-11 w-full rounded-[10px] bg-[var(--ok)] px-3.5 text-sm font-semibold text-white disabled:opacity-50"
+            >
+              Selesai Claim
+            </button>
+          </div>
+        {/if}
+
+        <details class="border-t border-[var(--border)] pt-2">
+          <summary class="min-h-11 flex cursor-pointer items-center text-xs font-semibold text-[var(--muted)]">
+            Punya Secret Key hex? Tempel di sini
+          </summary>
+          <div class="mt-2 flex items-center gap-2">
+            <input
+              type="password"
+              bind:value={secretInput}
+              placeholder="Secret key hex playit.gg"
+              class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-xs text-[var(--fg)]"
+            />
+            <button
+              type="button"
+              disabled={busy || !secretInput.trim()}
+              onclick={saveManualSecret}
+              class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)] disabled:opacity-50"
+            >
+              Simpan
+            </button>
+          </div>
+        </details>
+      </div>
+    {:else}
+      <p class="m-0 text-xs text-[var(--muted)]">
+        Akun playit.gg terhubung. Buat TCP tunnel ke <code class="font-mono">127.0.0.1:{status.localPort}</code> di dashboard playit.gg lalu tempel alamat publiknya:
+      </p>
+    {/if}
+
     <div class="flex items-center gap-2">
       <input
-        id="pub-addr"
+        aria-label="Alamat publik playit.gg"
         type="text"
         value={publicAddrDraft}
         oninput={(e) => onPublicAddrChange(e.currentTarget.value)}
@@ -70,76 +150,16 @@
         Simpan
       </button>
     </div>
-  </div>
 
-  <div class="flex items-center gap-2">
-    <button
-      type="button"
-      disabled={busy}
-      onclick={onClaimStart}
-      class="min-h-11 flex-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3.5 text-sm font-semibold text-[var(--fg)] disabled:opacity-50"
-    >
-      Link Playit.gg (Claim)
-    </button>
-    <button
-      type="button"
-      disabled={busy || !status.playitLinked}
-      onclick={onClearSecret}
-      class="min-h-11 shrink-0 rounded-[10px] bg-[var(--err)] px-3.5 text-sm font-semibold text-white disabled:opacity-50"
-    >
-      Unlink
-    </button>
-  </div>
-
-  {#if claim}
-    <div class="rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-2.5 flex flex-col gap-2">
-      <p class="m-0 text-xs text-[var(--muted)]">1. Buka URL ini di browser lalu setujui agent:</p>
-      <div class="flex items-center gap-2">
-        <input
-          type="text"
-          readonly
-          value={claim.url}
-          class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 font-mono text-xs text-[var(--fg)]"
-        />
-        <button
-          type="button"
-          onclick={() => onCopy(claim.url, 'Claim URL')}
-          class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)]"
-        >
-          Copy
-        </button>
-      </div>
-      <p class="m-0 text-xs text-[var(--muted)]">2. Setelah disetujui, simpan secret ke storage CE:</p>
+    {#if status.playitLinked}
       <button
         type="button"
         disabled={busy}
-        onclick={onClaimFinish}
-        class="min-h-11 w-full rounded-[10px] bg-[var(--accent)] px-3.5 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
+        onclick={onClearSecret}
+        class="min-h-11 self-start rounded-[10px] border border-[var(--err)] bg-transparent px-3 text-xs font-semibold text-[var(--err)] disabled:opacity-50"
       >
-        Selesaikan Claim
+        Putuskan Akun playit.gg
       </button>
-    </div>
+    {/if}
   {/if}
-
-  <details class="border-t border-[var(--border)] pt-2">
-    <summary class="min-h-11 flex cursor-pointer items-center text-sm font-semibold text-[var(--fg)]">
-      Tempel Secret Key hex manual
-    </summary>
-    <div class="mt-2 flex items-center gap-2">
-      <input
-        type="password"
-        bind:value={secretInput}
-        placeholder="Secret key hex (panjang genap)"
-        class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-xs text-[var(--fg)]"
-      />
-      <button
-        type="button"
-        disabled={busy || !secretInput.trim()}
-        onclick={saveManualSecret}
-        class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3.5 text-sm font-semibold text-[var(--fg)] disabled:opacity-50"
-      >
-        Simpan
-      </button>
-    </div>
-  </details>
 </section>

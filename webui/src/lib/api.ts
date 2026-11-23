@@ -5,7 +5,6 @@ import type {
   ConfigUpdate,
   KeyEntry,
   ModuleStatus,
-  OutputFileEntry,
 } from './types';
 
 const CTL_BIN = '/data/adb/modules/remotesh/bin/arm64-v8a/rmshctl';
@@ -176,40 +175,13 @@ export const remoteshApi = {
   async setPlayitSecret(hexSecret: string): Promise<void> {
     await runApi('playit-set-secret', '', hexSecret.trim());
   },
-
   async clearPlayitSecret(): Promise<void> {
     await runApi('playit-clear-secret');
-  },
-
-  async applySusfs(): Promise<string> {
-    const m = parseKV(await runApi('susfs-apply'));
-    return m.version || '';
-  },
-
-  async outputInventory(): Promise<OutputFileEntry[]> {
-    const raw = await runApi('output-info');
-    return raw
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => {
-        const [label, path, exists, bytes] = line.split('\t');
-        return {
-          label: label || '',
-          path: path || '',
-          exists: exists === '1',
-          bytes: Number(bytes) || 0,
-        };
-      });
   },
 
   async clearLogs(): Promise<void> {
     await runApi('clear-logs');
   },
-
-  async purgeState(): Promise<void> {
-    await runApi('purge-state');
-  },
-
   async readLog(which: 'ssh' | 'playit'): Promise<string> {
     const raw = await runApi('read-log', which);
     return fromBase64(raw.trim());

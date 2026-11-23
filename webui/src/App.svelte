@@ -8,17 +8,10 @@
     ConfigUpdate,
     KeyEntry,
     ModuleStatus,
-    OutputFileEntry,
   } from './lib/types';
-  import AuthCard from './components/AuthCard.svelte';
   import ConnectionCard from './components/ConnectionCard.svelte';
-  import OutputSusfsCard from './components/OutputSusfsCard.svelte';
-  import SettingsCard from './components/SettingsCard.svelte';
   import TunnelCard from './components/TunnelCard.svelte';
 
-  type TabId = 'control' | 'tunnel' | 'output';
-
-  let activeTab = $state<TabId>('control');
   let status = $state<ModuleStatus | null>(null);
   let loadError = $state('');
   let busy = $state(false);
@@ -26,10 +19,9 @@
   let checkResult = $state<CheckResult | null>(null);
   let sessionPw = $state('');
   let keys = $state<KeyEntry[]>([]);
+  let newKey = $state('');
   let claim = $state<ClaimStartResult | null>(null);
-  let files = $state<OutputFileEntry[]>([]);
-  let loadingFiles = $state(false);
-  let logText = $state('Pilih sumber log di atas.');
+  let logText = $state('');
   let loadingLog = $state(false);
   let toastMsg = $state('');
   let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -65,9 +57,24 @@
       autostart: s.autostart,
       passwordAuth: s.passwordAuth,
       pubkeyAuth: s.pubkeyAuth,
-      logEnabled: s.logEnabled,
-      susfsHide: s.susfsHide,
+      logEnabled: true,
+      susfsHide: true,
     };
+  }
+
+  async function runAutoCheck(s: ModuleStatus) {
+    if (!s.sshRunning) {
+      checkResult = null;
+      return;
+    }
+    checking = true;
+    try {
+      checkResult = await remoteshApi.check();
+    } catch {
+      checkResult = null;
+    } finally {
+      checking = false;
+    }
   }
 
   async function refreshAll() {
@@ -77,50 +84,26 @@
       status = s;
       syncDraft(s);
       keys = await remoteshApi.listKeys();
+      await runAutoCheck(s);
     } catch (err) {
       loadError = err instanceof Error ? err.message : String(err);
     }
   }
 
-  async function refreshFiles() {
-    loadingFiles = true;
-    try {
-      files = await remoteshApi.outputInventory();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
-    } finally {
-      loadingFiles = false;
-    }
-  }
-
-  const warnings = $derived.by(() => {
-    if (!status) return [];
-    const list: string[] = [];
-    if (!status.binsOk) list.push('Binary Dropbear belum ada di bin/arm64-v8a/ (build via GitHub Actions).');
-    if (status.enablePlayit && !status.playitBinOk) list.push('Binary playitd / playit-cli belum ada di bin/arm64-v8a/.');
-    if (!status.ceReady) list.push('Storage CE belum terbuka (buka kunci layar dulu).');
-    if (!status.hasPassword && status.keyCount === 0) list.push('Belum ada password atau SSH key. Buat password sebelum Start SSH.');
-    return list;
-  });
-
-  const metaLine = $derived.by(() => {
-    if (loadError) return 'Gagal membaca status';
-    if (!status) return 'Memuat status modul...';
-    const parts = [status.version];
-    if (status.sshRunning) parts.push(`SSH PID ${status.sshPid}`);
-    if (status.playitRunning) parts.push(`playit ${status.playitPhase}`);
-    return parts.join(' · ');
-  });
-
   async function toggleSsh() {
     if (!status) return;
     const starting = !status.sshRunning;
+    if (starting && !status.hasPassword && status.keyCount === 0) {
+      showToast('Buat password atau tambah SSH key dulu');
+      return;
+    }
     busy = true;
     try {
       const next = starting ? await remoteshApi.start() : await remoteshApi.stop();
       status = next;
       syncDraft(next);
-      showToast(starting ? 'SSH aktif' : 'SSH dimatikan');
+      showToast(starting ? 'SSH dijalankan' : 'SSH dimatikan');
+      await runAutoCheck(next);
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     } finally {
@@ -128,22 +111,11 @@
     }
   }
 
-  async function runCheck() {
-    checking = true;
-    try {
-      checkResult = await remoteshApi.check();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
-    } finally {
-      checking = false;
-    }
-  }
-
   async function saveConfig() {
     busy = true;
     try {
-      await remoteshApi.saveConfig(draft);
-      showToast('Konfigurasi disimpan');
+      await remoteshApi.saveConfig({ ...draft, logEnabled: true, susfsHide: true });
+      showToast('Pengaturan disimpan');
       await refreshAll();
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
@@ -159,11 +131,10 @@
     }
     busy = true;
     try {
-      showToast('Menghitung hash PBKDF2...');
       const spec = await derivePbkdf2Spec(pw);
       await remoteshApi.setPasswordHash(spec);
       sessionPw = pw;
-      showToast(pw.length < 12 ? 'Tersimpan (peringatan: < 12 char)' : 'Password root tersimpan');
+      showToast(pw.length < 12 ? 'Password tersimpan (peringatan: < 12 char)' : 'Password tersimpan');
       await refreshAll();
       return true;
     } catch (err) {
@@ -174,30 +145,17 @@
     }
   }
 
-  async function deletePassword() {
+  async function addKey() {
+    const k = newKey.trim();
+    if (!k) return;
     busy = true;
     try {
-      await remoteshApi.deletePassword();
-      sessionPw = '';
-      showToast('Password root dihapus');
-      await refreshAll();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function addKey(pubKey: string): Promise<boolean> {
-    busy = true;
-    try {
-      await remoteshApi.addKey(pubKey);
+      await remoteshApi.addKey(k);
+      newKey = '';
       showToast('SSH key ditambahkan');
       await refreshAll();
-      return true;
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
-      return false;
     } finally {
       busy = false;
     }
@@ -220,7 +178,7 @@
     busy = true;
     try {
       claim = await remoteshApi.claimStart();
-      showToast('Claim URL dibuat');
+      showToast('Link claim siap, buka di browser');
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     } finally {
@@ -234,7 +192,7 @@
     try {
       await remoteshApi.claimExchange(claim.code);
       claim = null;
-      showToast('Agent playit.gg terhubung');
+      showToast('playit.gg berhasil terhubung');
       await refreshAll();
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
@@ -262,7 +220,7 @@
     busy = true;
     try {
       await remoteshApi.clearPlayitSecret();
-      showToast('Secret playit.gg dihapus');
+      showToast('Akun playit.gg diputuskan');
       await refreshAll();
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
@@ -271,16 +229,14 @@
     }
   }
 
-  async function applySusfs() {
-    busy = true;
+  async function loadLog(which: 'ssh' | 'playit') {
+    loadingLog = true;
     try {
-      await remoteshApi.applySusfs();
-      showToast('Path modul disembunyikan via SuSFS');
-      await refreshAll();
+      logText = (await remoteshApi.readLog(which)) || '(log kosong)';
     } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
+      logText = `Gagal membaca log: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
-      busy = false;
+      loadingLog = false;
     }
   }
 
@@ -290,36 +246,10 @@
       await remoteshApi.clearLogs();
       logText = '(log kosong)';
       showToast('Log dibersihkan');
-      await refreshFiles();
     } catch (err) {
       showToast(err instanceof Error ? err.message : String(err));
     } finally {
       busy = false;
-    }
-  }
-
-  async function purgeState() {
-    busy = true;
-    try {
-      await remoteshApi.purgeState();
-      showToast('State sisa dihapus');
-      await refreshFiles();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : String(err));
-    } finally {
-      busy = false;
-    }
-  }
-
-  async function readLog(which: 'ssh' | 'playit') {
-    loadingLog = true;
-    try {
-      const text = await remoteshApi.readLog(which);
-      logText = text || '(log kosong)';
-    } catch (err) {
-      logText = `Gagal membaca log: ${err instanceof Error ? err.message : String(err)}`;
-    } finally {
-      loadingLog = false;
     }
   }
 
@@ -328,168 +258,220 @@
       await navigator.clipboard.writeText(value);
       showToast(`${label} disalin`);
     } catch {
-      showToast('Gagal menyalin ke clipboard');
+      showToast('Gagal menyalin');
     }
   }
 
-  function switchTab(tab: TabId) {
-    activeTab = tab;
-    if (tab === 'output' && files.length === 0 && status) {
-      void refreshFiles();
-    }
-  }
+  // Live proof strings so user immediately sees whether SSH + tunnel actually work.
+  const sshProof = $derived.by(() => {
+    if (!status) return { ok: false, text: 'Memuat...' };
+    if (!status.sshRunning) return { ok: false, text: 'Mati' };
+    if (checking) return { ok: true, text: `Hidup (PID ${status.sshPid}), menguji banner...` };
+    if (checkResult?.localOk) return { ok: true, text: `Berfungsi · ${checkResult.localBanner}` };
+    return { ok: false, text: `PID ${status.sshPid} aktif, port :${status.localPort} belum merespons` };
+  });
+
+  const remoteProof = $derived.by(() => {
+    if (!status) return { ok: false, text: '-' };
+    if (!status.playitLinked) return { ok: false, text: 'Belum dihubungkan ke playit.gg' };
+    if (!status.sshRunning) return { ok: false, text: 'Terhubung (menunggu SSH dinyalakan)' };
+    if (!status.publicAddr) return { ok: false, text: `Agent ${status.playitPhase} · alamat publik belum diisi` };
+    if (checking) return { ok: true, text: `Menguji ${status.publicAddr}...` };
+    if (checkResult?.publicState === 'ok') return { ok: true, text: `Tembus publik · ${checkResult.publicBanner}` };
+    if (checkResult?.publicState === 'fail') return { ok: false, text: `Gagal jangkau ${status.publicAddr}` };
+    return { ok: true, text: `Agent ${status.playitPhase}` };
+  });
 
   onMount(() => {
     void refreshAll();
   });
 </script>
 
-<main class="mx-auto flex max-w-[640px] flex-col gap-3.5 p-4">
-  <header class="flex items-start justify-between gap-3">
+<main class="mx-auto flex max-w-[560px] flex-col gap-3.5 p-4">
+  <header class="flex items-center justify-between gap-3">
     <div>
       <h1 class="m-0 text-xl font-bold leading-tight text-[var(--fg)]">RemoteSH</h1>
-      <p class="m-0 mt-1 text-[13px] text-[var(--muted)]">{metaLine}</p>
+      <p class="m-0 mt-0.5 text-xs text-[var(--muted)]">
+        {status?.susfsVersion ? `Auto-hide SuSFS ${status.susfsVersion} aktif` : 'SSH Root Android'}
+      </p>
     </div>
-    <div class="flex flex-col items-end gap-1.5">
-      <span
-        class="rounded-full border px-2.5 py-1 text-xs font-bold whitespace-nowrap bg-[var(--surface)]"
-        style:border-color={status?.sshRunning ? 'var(--ok)' : 'var(--border)'}
-        style:color={status?.sshRunning ? 'var(--ok)' : 'var(--muted)'}
-      >
-        {status ? (status.sshRunning ? 'RUNNING' : 'STOPPED') : 'MEMUAT'}
-      </span>
-      <span class="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-0.5 text-xs font-semibold text-[var(--muted)] whitespace-nowrap">
-        {status?.susfsVersion ? `SuSFS ${status.susfsVersion}${status.susfsHide ? ' · HIDE' : ''}` : 'SuSFS: -'}
-      </span>
-    </div>
+    <span
+      class="rounded-full border px-3 py-1 text-xs font-bold whitespace-nowrap bg-[var(--surface)]"
+      style:border-color={status?.sshRunning ? 'var(--ok)' : 'var(--border)'}
+      style:color={status?.sshRunning ? 'var(--ok)' : 'var(--muted)'}
+    >
+      {status ? (status.sshRunning ? 'AKTIF' : 'MATI') : 'MEMUAT'}
+    </span>
   </header>
 
   {#if loadError}
-    <div role="alert" class="rounded-[10px] border border-[var(--err)] bg-[var(--surface)] p-3 text-[13px] text-[var(--err)] flex items-center justify-between gap-2">
+    <div role="alert" class="rounded-[10px] border border-[var(--err)] bg-[var(--surface)] p-3 text-xs text-[var(--err)] flex items-center justify-between gap-2">
       <span>{loadError}</span>
       <button
         type="button"
         onclick={refreshAll}
         class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] px-3 text-xs font-semibold text-[var(--fg)]"
       >
-        Coba Lagi
+        Ulangi
       </button>
     </div>
   {/if}
 
-  {#if warnings.length > 0}
-    <div role="alert" class="rounded-[10px] border border-[var(--warn)] bg-[var(--surface)] p-3 text-[13px] text-[var(--warn)]">
-      {warnings.join(' ')}
-    </div>
-  {/if}
-
-  <section class="flex gap-2.5">
-    <button
-      type="button"
-      disabled={busy || !status}
-      onclick={toggleSsh}
-      class="min-h-12 flex-1 rounded-[10px] px-4 text-sm font-semibold text-white disabled:opacity-50"
-      style:background-color={status?.sshRunning ? 'var(--err)' : 'var(--accent)'}
-    >
-      {status?.sshRunning ? 'Stop SSH' : 'Start SSH'}
-    </button>
-    <button
-      type="button"
-      disabled={busy || checking || !status}
-      onclick={runCheck}
-      class="min-h-12 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-4 text-sm font-semibold text-[var(--fg)] disabled:opacity-50"
-    >
-      {checking ? 'Mengecek...' : 'Cek Port'}
-    </button>
-  </section>
-
-  <div role="tablist" aria-label="Bagian RemoteSH" class="grid grid-cols-3 gap-1.5 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-1">
-    <button
-      type="button"
-      role="tab"
-      aria-selected={activeTab === 'control'}
-      onclick={() => switchTab('control')}
-      class="min-h-11 rounded-lg px-2 text-sm font-semibold"
-      style:background-color={activeTab === 'control' ? 'var(--accent)' : 'transparent'}
-      style:color={activeTab === 'control' ? 'var(--accent-fg)' : 'var(--muted)'}
-    >
-      Kontrol
-    </button>
-    <button
-      type="button"
-      role="tab"
-      aria-selected={activeTab === 'tunnel'}
-      onclick={() => switchTab('tunnel')}
-      class="min-h-11 rounded-lg px-2 text-sm font-semibold"
-      style:background-color={activeTab === 'tunnel' ? 'var(--accent)' : 'transparent'}
-      style:color={activeTab === 'tunnel' ? 'var(--accent-fg)' : 'var(--muted)'}
-    >
-      Tunnel
-    </button>
-    <button
-      type="button"
-      role="tab"
-      aria-selected={activeTab === 'output'}
-      onclick={() => switchTab('output')}
-      class="min-h-11 rounded-lg px-2 text-sm font-semibold"
-      style:background-color={activeTab === 'output' ? 'var(--accent)' : 'transparent'}
-      style:color={activeTab === 'output' ? 'var(--accent-fg)' : 'var(--muted)'}
-    >
-      Output &amp; SuSFS
-    </button>
-  </div>
-
   {#if status}
-    {#if activeTab === 'control'}
-      <ConnectionCard
-        {status}
-        {sessionPw}
-        {checkResult}
-        {checking}
-        onCopy={copyText}
-      />
-      <AuthCard
-        {status}
-        {keys}
-        {busy}
-        onGeneratePassword={() => void setPassword(generateStrongPassword(16))}
-        onSetPassword={setPassword}
-        onDeletePassword={deletePassword}
-        onAddKey={addKey}
-        onDeleteKey={deleteKey}
-      />
-    {:else if activeTab === 'tunnel'}
-      <TunnelCard
-        {status}
-        {busy}
-        {claim}
-        publicAddrDraft={draft.publicAddr}
-        onPublicAddrChange={(val) => (draft.publicAddr = val)}
-        onSavePublicAddr={saveConfig}
-        onClaimStart={claimStart}
-        onClaimFinish={claimFinish}
-        onSetSecret={setPlayitSecret}
-        onClearSecret={clearPlayitSecret}
-        onCopy={copyText}
-      />
-      <SettingsCard bind:draft {busy} onSave={saveConfig} />
-    {:else}
-      <OutputSusfsCard
-        bind:draft
-        susfsVersion={status.susfsVersion}
-        {busy}
-        {files}
-        {loadingFiles}
-        {logText}
-        {loadingLog}
-        onToggleSave={saveConfig}
-        onApplySusfs={applySusfs}
-        onClearLogs={clearLogs}
-        onPurgeState={purgeState}
-        onRefreshFiles={refreshFiles}
-        onReadLog={readLog}
-      />
-    {/if}
+    <section class="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3.5 flex flex-col gap-3">
+      <button
+        type="button"
+        disabled={busy}
+        onclick={toggleSsh}
+        class="min-h-12 w-full rounded-[10px] px-4 text-base font-semibold text-white disabled:opacity-50"
+        style:background-color={status.sshRunning ? 'var(--err)' : 'var(--accent)'}
+      >
+        {status.sshRunning ? 'Stop SSH' : 'Start SSH'}
+      </button>
+
+      <div class="flex flex-col gap-1.5 border-t border-[var(--border)] pt-2.5 text-xs">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[var(--muted)]">Server SSH</span>
+          <span class="font-mono text-right" style:color={sshProof.ok ? 'var(--ok)' : 'var(--muted)'}>
+            {sshProof.text}
+          </span>
+        </div>
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-[var(--muted)]">Akses Publik</span>
+          <span class="font-mono text-right" style:color={remoteProof.ok ? 'var(--ok)' : 'var(--warn)'}>
+            {remoteProof.text}
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <ConnectionCard
+      {status}
+      {sessionPw}
+      {busy}
+      onGeneratePassword={() => void setPassword(generateStrongPassword(16))}
+      onSetPassword={setPassword}
+      onCopy={copyText}
+    />
+
+    <TunnelCard
+      {status}
+      {busy}
+      {claim}
+      publicAddrDraft={draft.publicAddr}
+      onPublicAddrChange={(val) => (draft.publicAddr = val)}
+      onSavePublicAddr={saveConfig}
+      onClaimStart={claimStart}
+      onClaimFinish={claimFinish}
+      onSetSecret={setPlayitSecret}
+      onClearSecret={clearPlayitSecret}
+      onCopy={copyText}
+    />
+
+    <details class="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-3.5">
+      <summary class="min-h-11 flex cursor-pointer items-center justify-between text-sm font-semibold text-[var(--fg)]">
+        <span>Pengaturan &amp; Log</span>
+        <span class="font-mono text-xs font-normal text-[var(--muted)]">Port {status.localPort}</span>
+      </summary>
+
+      <div class="mt-3 flex flex-col gap-3 border-t border-[var(--border)] pt-3">
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-[var(--fg)] flex-1" for="cfg-port">Port Lokal</label>
+          <input
+            id="cfg-port"
+            type="number"
+            min="1"
+            max="65535"
+            bind:value={draft.localPort}
+            class="min-h-11 w-28 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-sm text-[var(--fg)]"
+          />
+        </div>
+
+        <label class="min-h-11 flex cursor-pointer items-center justify-between gap-3 text-sm">
+          <span>Izinkan akses LAN (Wi-Fi lokal)</span>
+          <input type="checkbox" bind:checked={draft.listenLan} class="h-5 w-5 accent-[var(--accent)]" />
+        </label>
+
+        <label class="min-h-11 flex cursor-pointer items-center justify-between gap-3 text-sm">
+          <span>Jalankan otomatis setelah reboot</span>
+          <input type="checkbox" bind:checked={draft.autostart} class="h-5 w-5 accent-[var(--accent)]" />
+        </label>
+
+        <button
+          type="button"
+          disabled={busy}
+          onclick={saveConfig}
+          class="min-h-11 w-full rounded-[10px] bg-[var(--accent)] px-3.5 text-sm font-semibold text-[var(--accent-fg)] disabled:opacity-50"
+        >
+          Simpan Pengaturan
+        </button>
+
+        <div class="border-t border-[var(--border)] pt-3 flex flex-col gap-2">
+          <span class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">SSH Public Key ({keys.length})</span>
+          {#each keys as item (item.index)}
+            <div class="flex items-center gap-2 rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-2.5 py-1.5">
+              <span class="flex-1 truncate font-mono text-xs text-[var(--fg)]">{item.key}</span>
+              <button
+                type="button"
+                disabled={busy}
+                onclick={() => deleteKey(item.index)}
+                class="min-h-11 shrink-0 rounded-[10px] bg-[var(--err)] px-3 text-xs font-semibold text-white"
+              >
+                Hapus
+              </button>
+            </div>
+          {/each}
+          <div class="flex items-center gap-2">
+            <input
+              type="text"
+              bind:value={newKey}
+              placeholder="ssh-ed25519 AAAA..."
+              class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-xs text-[var(--fg)]"
+            />
+            <button
+              type="button"
+              disabled={busy || !newKey.trim()}
+              onclick={addKey}
+              class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)] disabled:opacity-50"
+            >
+              Tambah
+            </button>
+          </div>
+        </div>
+
+        <div class="border-t border-[var(--border)] pt-3 flex flex-col gap-2">
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={loadingLog}
+              onclick={() => loadLog('ssh')}
+              class="min-h-11 flex-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)]"
+            >
+              Log SSH
+            </button>
+            <button
+              type="button"
+              disabled={loadingLog}
+              onclick={() => loadLog('playit')}
+              class="min-h-11 flex-1 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--fg)]"
+            >
+              Log playitd
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onclick={clearLogs}
+              class="min-h-11 shrink-0 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 text-xs font-semibold text-[var(--muted)]"
+            >
+              Bersihkan
+            </button>
+          </div>
+          {#if logText || loadingLog}
+            <pre class="m-0 max-h-52 overflow-auto rounded-[10px] border border-[var(--border)] bg-[var(--bg)] p-2.5 font-mono text-xs whitespace-pre-wrap break-all text-[var(--fg)]">{loadingLog ? 'Memuat...' : logText}</pre>
+          {/if}
+        </div>
+      </div>
+    </details>
   {/if}
 </main>
 

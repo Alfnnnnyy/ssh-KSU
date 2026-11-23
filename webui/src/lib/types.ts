@@ -39,13 +39,6 @@ export interface KeyEntry {
   key: string;
 }
 
-export interface OutputFileEntry {
-  label: string;
-  path: string;
-  exists: boolean;
-  bytes: number;
-}
-
 export interface ClaimStartResult {
   code: string;
   url: string;
