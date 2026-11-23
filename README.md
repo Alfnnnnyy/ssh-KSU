@@ -26,9 +26,9 @@ Jika `ksu_susfs` terdeteksi dan `SUSFS_HIDE=1`, `rmshctl` memanggil `add_sus_pat
 
 1. Unduh `remotesh-v*-arm64.zip` dari halaman **Releases** dan flash di KernelSU / APatch / Magisk, lalu reboot.
 2. Buka **WebUI** modul (di Magisk gunakan MMRL atau KsuWebUIStandalone; tombol **Action** jalan native di semua manager).
-3. Di tab **Tunnel**: klik **Link Playit.gg (Claim)**, buka tautan di browser untuk menyetujui agent, lalu buat TCP Tunnel di dashboard `playit.gg` mengarah ke `127.0.0.1:2222` dan simpan alamat publik (`host:port`).
-4. Di tab **Kontrol**: klik **Generate Password (16 char)** (atau tambah SSH Public Key), lalu klik **Start SSH** dan **Cek Port**.
-5. Salin perintah `ssh -p <port> root@<host>` atau format `<host>:<port>:root:<password>` untuk login dari perangkat lain.
+3. Di bagian **Akses Beda Negara (playit.gg)**: klik **Link Playit.gg**, buka tautan di browser untuk menyetujui agent, lalu buat TCP Tunnel di dashboard `playit.gg` mengarah ke `127.0.0.1:2222` dan simpan alamat publik (`host:port`).
+4. Klik **Buat Password (16 char)** (atau tambah SSH Public Key di *Pengaturan & Log*), lalu klik **Start SSH**. Status **Server SSH** dan **Akses Publik** otomatis diuji (banner `SSH-2.0-ssh` + latency ms).
+5. Salin `ssh -p <port> root@<host>` atau `<host>:<port>:root:<password>` untuk login dari perangkat lain. SuSFS auto-hide berjalan otomatis di latar belakang tanpa tombol manual.
 
 ## Build & Release
 
