@@ -1,0 +1,12 @@
+[package]
+name = "rmshctl"
+version = "1.0.0"
+edition = "2021"
+description = "Mount-free Android KernelSU SSH + playit.gg + SuSFS controller (pure std)"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

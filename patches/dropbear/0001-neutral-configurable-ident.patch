@@ -1,0 +1,76 @@
+--- a/src/sysoptions.h
++++ b/src/sysoptions.h
+@@ -11,7 +11,11 @@
+ #ifndef IDENT_VERSION_PART
+ #define IDENT_VERSION_PART "_" DROPBEAR_VERSION
+ #endif
+-#define LOCAL_IDENT "SSH-2.0-dropbear" IDENT_VERSION_PART
++/* Adapted from VD171/VD-dropbear (Apache-2.0): runtime-configurable neutral
++   SSH identity banner via $DROPBEAR_IDENT so scanners cannot fingerprint version. */
++#define LOCAL_IDENT_DEFAULT "SSH-2.0-ssh"
++const char* local_ident(void);
+ #define PROGNAME "dropbear"
+ 
+ #ifndef DROPBEAR_CLIENT
+--- a/src/common-session.c
++++ b/src/common-session.c
+@@ -370,9 +370,29 @@
+ 	TRACE(("leave session_cleanup"))
+ }
+ 
++/* Choose SSH identity banner: valid $DROPBEAR_IDENT or neutral default. */
++const char* local_ident(void) {
++	static const char *cached = NULL;
++	if (cached == NULL) {
++		const char *env = getenv("DROPBEAR_IDENT");
++		if (env != NULL && strncmp(env, "SSH-2.0-", 8) == 0 && env[8] != '\0'
++				&& strlen(env) < 64 && strchr(env, ' ') == NULL
++				&& strchr(env + 8, '-') == NULL) {
++			cached = env;
++		} else {
++			cached = LOCAL_IDENT_DEFAULT;
++		}
++	}
++	return cached;
++}
++
+ void send_session_identification() {
+-	buffer *writebuf = buf_new(strlen(LOCAL_IDENT "\r\n") + 1);
+-	buf_putbytes(writebuf, (const unsigned char *) LOCAL_IDENT "\r\n", strlen(LOCAL_IDENT "\r\n"));
++	const char *ident = local_ident();
++	unsigned int ilen = strlen(ident);
++	buffer *writebuf = buf_new(ilen + 3);
++	buf_putbytes(writebuf, (const unsigned char *) ident, ilen);
++	buf_putbytes(writebuf, (const unsigned char *) "\r\n", 2);
+ 	writebuf_enqueue(writebuf);
+ }
+ 
+--- a/src/common-kex.c
++++ b/src/common-kex.c
+@@ -511,7 +511,7 @@
+ 	}
+ 
+ 	/* start the kex hash */
+-	local_ident_len = strlen(LOCAL_IDENT);
++	local_ident_len = strlen(local_ident());
+ 	remote_ident_len = strlen(ses.remoteident);
+ 
+ 	kexhashbuf_len = local_ident_len + remote_ident_len
+@@ -526,7 +526,7 @@
+ 		read_kex_algos();
+ 
+ 		/* V_C, the client's version string (CR and NL excluded) */
+-		buf_putstring(ses.kexhashbuf, LOCAL_IDENT, local_ident_len);
++		buf_putstring(ses.kexhashbuf, local_ident(), local_ident_len);
+ 		/* V_S, the server's version string (CR and NL excluded) */
+ 		buf_putstring(ses.kexhashbuf, ses.remoteident, remote_ident_len);
+ 
+@@ -547,7 +547,7 @@
+ 		/* V_C, the client's version string (CR and NL excluded) */
+ 		buf_putstring(ses.kexhashbuf, ses.remoteident, remote_ident_len);
+ 		/* V_S, the server's version string (CR and NL excluded) */
+-		buf_putstring(ses.kexhashbuf, LOCAL_IDENT, local_ident_len);
++		buf_putstring(ses.kexhashbuf, local_ident(), local_ident_len);
+ 
+ 		/* I_C, the payload of the client's SSH_MSG_KEXINIT */
+ 		buf_setpos(ses.payload, ses.payload_beginning);

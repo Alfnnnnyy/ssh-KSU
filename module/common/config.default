@@ -1,0 +1,14 @@
+# RemoteSH default configuration (KEY='value').
+# Edited safely through WebUI or /data/adb/remotesh/config.
+AUTOSTART='0'
+LOCAL_PORT='2222'
+LISTEN_LAN='0'
+ENABLE_PLAYIT='1'
+PUBLIC_ADDR=''
+PASSWORD_AUTH='1'
+PUBKEY_AUTH='1'
+MAX_AUTH_TRIES='3'
+HIDE_IDENT='1'
+LOG_ENABLED='1'
+MAX_LOG_KB='256'
+SUSFS_HIDE='1'
