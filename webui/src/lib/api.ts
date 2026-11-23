@@ -136,8 +136,13 @@ export const remoteshApi = {
     await runApi('set-config', '', payload);
   },
 
-  async setPasswordHash(pbkdf2Spec: string): Promise<void> {
-    await runApi('set-pw', 'root', pbkdf2Spec);
+  async getPassword(): Promise<string> {
+    const raw = await runApi('get-pw');
+    return fromBase64(raw.trim());
+  },
+
+  async setPasswordHash(pbkdf2Spec: string, rawPassword: string): Promise<void> {
+    await runApi('set-pw', 'root', `${pbkdf2Spec}\n${rawPassword}`);
   },
 
   async deletePassword(): Promise<void> {

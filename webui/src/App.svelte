@@ -83,7 +83,12 @@
       const s = await remoteshApi.status();
       status = s;
       syncDraft(s);
-      keys = await remoteshApi.listKeys();
+      const [loadedKeys, savedPw] = await Promise.all([
+        remoteshApi.listKeys(),
+        s.hasPassword ? remoteshApi.getPassword().catch(() => '') : Promise.resolve(''),
+      ]);
+      keys = loadedKeys;
+      if (savedPw) sessionPw = savedPw;
       await runAutoCheck(s);
     } catch (err) {
       loadError = err instanceof Error ? err.message : String(err);
@@ -132,7 +137,7 @@
     busy = true;
     try {
       const spec = await derivePbkdf2Spec(pw);
-      await remoteshApi.setPasswordHash(spec);
+      await remoteshApi.setPasswordHash(spec, pw);
       sessionPw = pw;
       showToast(pw.length < 12 ? 'Password tersimpan (peringatan: < 12 char)' : 'Password tersimpan');
       await refreshAll();

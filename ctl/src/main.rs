@@ -38,6 +38,7 @@ struct Paths {
     secret: PathBuf,
     hostkey: PathBuf,
     passwd: PathBuf,
+    passwd_view: PathBuf,
     authkeys: PathBuf,
     playit_secret: PathBuf,
     shim: PathBuf,
@@ -77,6 +78,7 @@ impl Paths {
             playit_log: state.join("playitd.log"),
             hostkey: secret.join("hostkey_ed25519"),
             passwd: secret.join("passwd"),
+            passwd_view: secret.join("passwd.view"),
             authkeys: secret.join("authorized_keys"),
             playit_secret: secret.join("playit.toml"),
             moddir,
@@ -845,12 +847,24 @@ fn run(args: &[String]) -> Result<(), String> {
             Ok(())
         }
 
+        "get-pw" => {
+            if let Ok(pw) = fs::read_to_string(&paths.passwd_view) {
+                println!("{}", b64::encode(pw.trim_end_matches(&['\r', '\n'][..]).as_bytes()));
+            } else {
+                println!();
+            }
+            Ok(())
+        }
+
         "set-pw" => {
             let user = args.get(1).map(|s| s.as_str()).unwrap_or("root");
             if !valid_user(user) {
                 return Err("bad user".to_string());
             }
-            let spec = read_stdin_b64_utf8()?.trim().to_string();
+            let payload = read_stdin_b64_utf8()?;
+            let mut parts = payload.splitn(2, '\n');
+            let spec = parts.next().unwrap_or("").trim().to_string();
+            let raw_pw = parts.next().map(|s| s.trim_end_matches(&['\r', '\n'][..]));
             validate_pbkdf2_spec(&spec)?;
             ensure_secret_dir(&paths)?;
             let mut lines: Vec<String> = fs::read_to_string(&paths.passwd)
@@ -863,6 +877,13 @@ fn run(args: &[String]) -> Result<(), String> {
             let mut body = lines.join("\n");
             body.push('\n');
             atomic_write_0600(&paths.passwd, body.as_bytes())?;
+            if let Some(pw) = raw_pw {
+                if !pw.is_empty() {
+                    atomic_write_0600(&paths.passwd_view, pw.as_bytes())?;
+                }
+            } else {
+                let _ = fs::remove_file(&paths.passwd_view);
+            }
             if cfg.susfs_hide {
                 let _ = apply_susfs(&paths);
             }
@@ -888,6 +909,7 @@ fn run(args: &[String]) -> Result<(), String> {
                 }
                 atomic_write_0600(&paths.passwd, body.as_bytes())?;
             }
+            let _ = fs::remove_file(&paths.passwd_view);
             println!("ok");
             Ok(())
         }
