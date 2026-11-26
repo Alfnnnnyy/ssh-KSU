@@ -20,6 +20,7 @@ fi
 for req in \
   module.prop customize.sh service.sh action.sh uninstall.sh \
   common/config.default webroot/index.html webroot/scrcpy-server; do
+  [ -f "$MOD/$req" ] || { echo "ERROR: missing module/$req" >&2; exit 1; }
 done
 [ -d "$MOD/webroot/assets" ] || { echo "ERROR: missing module/webroot/assets (run npm run build in webui/ first)" >&2; exit 1; }
 
