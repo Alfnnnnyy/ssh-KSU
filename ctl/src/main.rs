@@ -1,5 +1,7 @@
 mod b64;
 mod config;
+mod sha1;
+mod ws_proxy;
 
 use config::{atomic_write_0600, valid_public_addr, Config};
 use std::env;
@@ -42,6 +44,8 @@ struct Paths {
     authkeys: PathBuf,
     playit_secret: PathBuf,
     shim: PathBuf,
+    wsproxy_pid: PathBuf,
+    wsproxy_log: PathBuf,
 }
 
 impl Paths {
@@ -84,6 +88,8 @@ impl Paths {
             moddir,
             bin_dir,
             data,
+            wsproxy_pid: state.join("wsproxy.pid"),
+            wsproxy_log: state.join("wsproxy.log"),
             state,
             ce_root,
             secret,
@@ -303,6 +309,8 @@ fn cleanup_runtime(paths: &Paths) {
     let _ = fs::remove_file(&paths.playit_pid);
     let _ = fs::remove_file(&paths.playit_sock);
     let _ = fs::remove_dir_all(&paths.shim);
+    let _ = fs::remove_file(&paths.wsproxy_pid);
+    let _ = fs::remove_file(&paths.wsproxy_log);
 }
 
 // --- secrets & daemon lifecycle -------------------------------------------
@@ -391,6 +399,9 @@ fn stop_all(paths: &Paths) {
     }
     if let Some(sp) = find_proc_pid(&paths.ssh_pid, SSH_PROC) {
         stop_pid(sp);
+    }
+    if let Some(wp) = find_proc_pid(&paths.wsproxy_pid, "rmshctl") {
+        stop_pid(wp);
     }
     cleanup_runtime(paths);
 }
@@ -490,6 +501,23 @@ fn start_playit(paths: &Paths, cfg: &Config) -> Result<(), String> {
     Err("playitd failed to start".to_string())
 }
 
+fn start_wsproxy(paths: &Paths, port: u16) -> Result<(), String> {
+    if find_proc_pid(&paths.wsproxy_pid, "rmshctl").is_some() {
+        return Ok(());
+    }
+    let cur_exe = env::current_exe().unwrap_or_else(|_| paths.bin_dir.join("rmshctl"));
+    let mut cmd = Command::new(&cur_exe);
+    cmd.arg("wsproxy").arg(port.to_string());
+    let pid = spawn_detached(&mut cmd, &paths.wsproxy_log, true)?;
+    let _ = atomic_write_0600(&paths.wsproxy_pid, format!("{pid}\n").as_bytes());
+    for _ in 0..10 {
+        if find_proc_pid(&paths.wsproxy_pid, "rmshctl").is_some() {
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Ok(())
+}
 fn start_all(paths: &Paths, cfg: &Config) -> Result<(), String> {
     stop_all(paths);
     enforce_log_caps(paths, cfg);
@@ -498,6 +526,7 @@ fn start_all(paths: &Paths, cfg: &Config) -> Result<(), String> {
     }
     start_ssh(paths, cfg)?;
     let _ = start_playit(paths, cfg);
+    let _ = start_wsproxy(paths, 2246);
     if cfg.susfs_hide {
         let _ = apply_susfs(paths);
     }
@@ -684,6 +713,8 @@ fn print_status(paths: &Paths, cfg: &Config) {
     println!("version={}", module_version(paths));
     println!("adb_running={}", usize::from(adb_is_running()));
     println!("adb_port={}", adb_port());
+    let wp = find_proc_pid(&paths.wsproxy_pid, "rmshctl");
+    println!("wsproxy_running={}", usize::from(wp.is_some()));
 }
 
 fn probe_ssh_banner(host: &str, port: u16) -> Option<(String, u128)> {
@@ -1186,6 +1217,26 @@ fn run(args: &[String]) -> Result<(), String> {
         "adb-add-key" => {
             let key = read_stdin_b64_utf8()?;
             append_adb_key(&key)?;
+            println!("ok");
+            Ok(())
+        }
+        "wsproxy" => {
+            let port: u16 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(2246);
+            ws_proxy::run_wsproxy(port)
+        }
+
+        "wsproxy-start" => {
+            let port: u16 = args.get(1).and_then(|s| s.parse().ok()).unwrap_or(2246);
+            start_wsproxy(&paths, port)?;
+            println!("ok");
+            Ok(())
+        }
+
+        "wsproxy-stop" => {
+            if let Some(wp) = find_proc_pid(&paths.wsproxy_pid, "rmshctl") {
+                stop_pid(wp);
+            }
+            let _ = fs::remove_file(&paths.wsproxy_pid);
             println!("ok");
             Ok(())
         }

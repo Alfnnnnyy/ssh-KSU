@@ -11,6 +11,7 @@
   } from './lib/types';
   import ConnectionCard from './components/ConnectionCard.svelte';
   import ScrcpyCard from './components/ScrcpyCard.svelte';
+  import RemoteControllerCard from './components/RemoteControllerCard.svelte';
   import TunnelCard from './components/TunnelCard.svelte';
 
   let status = $state<ModuleStatus | null>(null);
@@ -399,6 +400,8 @@
       onAddAdbKey={addAdbKey}
       onCopy={copyText}
     />
+
+    <RemoteControllerCard {busy} />
 
     <TunnelCard
       {status}

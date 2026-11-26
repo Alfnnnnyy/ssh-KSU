@@ -29,7 +29,8 @@ Jika `ksu_susfs` terdeteksi dan `SUSFS_HIDE=1`, `rmshctl` memanggil `add_sus_pat
 3. Di bagian **Akses Beda Negara (playit.gg)**: klik **Link Playit.gg**, buka tautan di browser untuk menyetujui agent, lalu buat TCP Tunnel di dashboard `playit.gg` mengarah ke `127.0.0.1:2222` dan simpan alamat publik (`host:port`).
 4. Klik **Buat Password (16 char)** (atau tambah SSH Public Key di *Pengaturan & Log*), lalu klik **Start SSH**. Status **Server SSH** dan **Akses Publik** otomatis diuji (banner `SSH-2.0-ssh` + latency ms).
 5. Salin `ssh -p <port> root@<host>` atau `<host>:<port>:root:<password>` untuk login dari perangkat lain.
-6. **Kontrol Layar (scrcpy):** di WebUI, aktifkan **Nyalakan Akses Layar (Wireless ADB)**. Di PC/laptop jalankan `scrcpy --tcpip=<host>:5555` untuk mirror layar dan kontrol mouse/keyboard langsung. Tersedia fitur otorisasi PC (`adbkey.pub`) agar tidak muncul pop-up izin di layar HP saat ditinggal jauh.
+6. **Kontrol Layar HP Lain (Remote Screen):** di WebUI bagian *Kontrol Layar HP Lain*, ketik IP Tailscale / LAN HP target (contoh: `100.80.20.10:5555`), lalu klik **Konek Layar**. Layar HP target akan langsung muncul di dalam WebUI HP kamu via `<canvas>` WebCodecs, lengkap dengan kontrol sentuh langsung dan tombol navigasi (Back, Home, Menu, Power).
+7. **Akses Layar HP Ini (Inbound Wireless ADB):** aktifkan toggle *Akses Layar (Wireless ADB)* jika kamu ingin HP ini yang dikontrol dari perangkat lain via `scrcpy --tcpip=<host>:5555`.
 
 ## Build & Release
 

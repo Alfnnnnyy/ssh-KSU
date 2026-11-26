@@ -1,6 +1,6 @@
 id=remotesh
 name=RemoteSH (Dropbear + playit.gg)
-version=v1.0.3
-versionCode=10003
+version=v1.0.4
+versionCode=10004
 author=RemoteSH
 description=Mount-free root SSH server (Dropbear PBKDF2 + playit.gg tunnel) for KernelSU/APatch/Magisk with WebUI, output file control, and SuSFS auto-hide.
