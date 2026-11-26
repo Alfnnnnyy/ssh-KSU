@@ -89,6 +89,8 @@ function parseStatus(raw: string): ModuleStatus {
     binsOk: m.bins_ok === '1',
     playitBinOk: m.playit_bin_ok === '1',
     hostkeyFp: m.hostkey_fp || '',
+    adbRunning: m.adb_running === '1',
+    adbPort: Number(m.adb_port) || 5555,
     version: m.version || 'v1.0.0',
   };
 }
@@ -190,5 +192,17 @@ export const remoteshApi = {
   async readLog(which: 'ssh' | 'playit'): Promise<string> {
     const raw = await runApi('read-log', which);
     return fromBase64(raw.trim());
+  },
+
+  async enableAdb(port = 5555): Promise<void> {
+    await runApi('adb-enable', String(port));
+  },
+
+  async disableAdb(): Promise<void> {
+    await runApi('adb-disable');
+  },
+
+  async addAdbKey(key: string): Promise<void> {
+    await runApi('adb-add-key', '', key.trim());
   },
 };

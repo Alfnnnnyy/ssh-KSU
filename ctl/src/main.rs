@@ -421,10 +421,7 @@ fn start_ssh(paths: &Paths, cfg: &Config) -> Result<(), String> {
         .arg("-P")
         .arg(&paths.ssh_pid)
         .arg("-e")
-        .arg("-T")
-        .arg(cfg.max_auth_tries.to_string())
-        .arg("-j")
-        .arg("-k");
+        .arg(cfg.max_auth_tries.to_string());
     if !cfg.password_auth {
         cmd.arg("-s");
     }
@@ -592,6 +589,51 @@ fn module_version(paths: &Paths) -> String {
     }
     "v1.0.0".to_string()
 }
+fn adb_port() -> u16 {
+    getprop("service.adb.tcp.port")
+        .and_then(|v| v.trim().parse::<u16>().ok())
+        .unwrap_or(0)
+}
+
+fn adb_is_running() -> bool {
+    adb_port() > 0 && getprop("init.svc.adbd").as_deref() == Some("running")
+}
+
+fn set_adb_tcp(port: Option<u16>) -> Result<(), String> {
+    let p_str = port.map(|p| p.to_string()).unwrap_or_default();
+    let status = Command::new("setprop")
+        .args(["service.adb.tcp.port", &p_str])
+        .status()
+        .map_err(|e| format!("setprop failed: {e}"))?;
+    if !status.success() {
+        return Err("setprop failed".to_string());
+    }
+    let _ = Command::new("stop").arg("adbd").status();
+    let _ = Command::new("start").arg("adbd").status();
+    Ok(())
+}
+
+fn append_adb_key(pubkey: &str) -> Result<(), String> {
+    let key = pubkey.trim();
+    if key.is_empty() {
+        return Err("empty adb key".to_string());
+    }
+    let p = Path::new("/data/misc/adb/adb_keys");
+    let mut current = fs::read_to_string(p).unwrap_or_default();
+    if !current.lines().any(|l| l.trim() == key) {
+        if !current.is_empty() && !current.ends_with('\n') {
+            current.push('\n');
+        }
+        current.push_str(key);
+        current.push('\n');
+        atomic_write_0600(p, current.as_bytes())?;
+        fs::set_permissions(p, fs::Permissions::from_mode(0o640)).ok();
+        if let Ok(cpath) = CString::new("/data/misc/adb/adb_keys") {
+            unsafe { chown(cpath.as_ptr(), 1000, 2000) };
+        }
+    }
+    Ok(())
+}
 
 fn print_status(paths: &Paths, cfg: &Config) {
     let sp = find_proc_pid(&paths.ssh_pid, SSH_PROC);
@@ -640,6 +682,8 @@ fn print_status(paths: &Paths, cfg: &Config) {
     println!("playit_bin_ok={}", usize::from(playit_bin_ok));
     println!("hostkey_fp={}", hostkey_fingerprint(paths));
     println!("version={}", module_version(paths));
+    println!("adb_running={}", usize::from(adb_is_running()));
+    println!("adb_port={}", adb_port());
 }
 
 fn probe_ssh_banner(host: &str, port: u16) -> Option<(String, u128)> {
@@ -1118,6 +1162,31 @@ fn run(args: &[String]) -> Result<(), String> {
             } else {
                 println!();
             }
+            Ok(())
+        }
+        "adb-status" => {
+            println!("adb_running={}", usize::from(adb_is_running()));
+            println!("adb_port={}", adb_port());
+            Ok(())
+        }
+
+        "adb-enable" => {
+            let port = args.get(1).and_then(|s| s.parse::<u16>().ok()).unwrap_or(5555);
+            set_adb_tcp(Some(port))?;
+            println!("ok");
+            Ok(())
+        }
+
+        "adb-disable" => {
+            set_adb_tcp(None)?;
+            println!("ok");
+            Ok(())
+        }
+
+        "adb-add-key" => {
+            let key = read_stdin_b64_utf8()?;
+            append_adb_key(&key)?;
+            println!("ok");
             Ok(())
         }
 

@@ -23,6 +23,8 @@ export interface ModuleStatus {
   binsOk: boolean;
   playitBinOk: boolean;
   hostkeyFp: string;
+  adbRunning: boolean;
+  adbPort: number;
   version: string;
 }
 

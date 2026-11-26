@@ -28,7 +28,8 @@ Jika `ksu_susfs` terdeteksi dan `SUSFS_HIDE=1`, `rmshctl` memanggil `add_sus_pat
 2. Buka **WebUI** modul (di Magisk gunakan MMRL atau KsuWebUIStandalone; tombol **Action** jalan native di semua manager).
 3. Di bagian **Akses Beda Negara (playit.gg)**: klik **Link Playit.gg**, buka tautan di browser untuk menyetujui agent, lalu buat TCP Tunnel di dashboard `playit.gg` mengarah ke `127.0.0.1:2222` dan simpan alamat publik (`host:port`).
 4. Klik **Buat Password (16 char)** (atau tambah SSH Public Key di *Pengaturan & Log*), lalu klik **Start SSH**. Status **Server SSH** dan **Akses Publik** otomatis diuji (banner `SSH-2.0-ssh` + latency ms).
-5. Salin `ssh -p <port> root@<host>` atau `<host>:<port>:root:<password>` untuk login dari perangkat lain. SuSFS auto-hide berjalan otomatis di latar belakang tanpa tombol manual.
+5. Salin `ssh -p <port> root@<host>` atau `<host>:<port>:root:<password>` untuk login dari perangkat lain.
+6. **Kontrol Layar (scrcpy):** di WebUI, aktifkan **Nyalakan Akses Layar (Wireless ADB)**. Di PC/laptop jalankan `scrcpy --tcpip=<host>:5555` untuk mirror layar dan kontrol mouse/keyboard langsung. Tersedia fitur otorisasi PC (`adbkey.pub`) agar tidak muncul pop-up izin di layar HP saat ditinggal jauh.
 
 ## Build & Release
 

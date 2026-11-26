@@ -10,6 +10,7 @@
     ModuleStatus,
   } from './lib/types';
   import ConnectionCard from './components/ConnectionCard.svelte';
+  import ScrcpyCard from './components/ScrcpyCard.svelte';
   import TunnelCard from './components/TunnelCard.svelte';
 
   let status = $state<ModuleStatus | null>(null);
@@ -266,6 +267,39 @@
       showToast('Gagal menyalin');
     }
   }
+  async function toggleAdb() {
+    if (!status) return;
+    busy = true;
+    try {
+      if (status.adbRunning) {
+        await remoteshApi.disableAdb();
+        showToast('Akses layar (Wireless ADB) dimatikan');
+      } else {
+        await remoteshApi.enableAdb(5555);
+        showToast('Akses layar (Wireless ADB) aktif di port 5555');
+      }
+      await refreshAll();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      busy = false;
+    }
+  }
+
+  async function addAdbKey(key: string): Promise<boolean> {
+    busy = true;
+    try {
+      await remoteshApi.addAdbKey(key);
+      showToast('Kunci ADB PC berhasil diotorisasi');
+      await refreshAll();
+      return true;
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : String(err));
+      return false;
+    } finally {
+      busy = false;
+    }
+  }
 
   // Live proof strings so user immediately sees whether SSH + tunnel actually work.
   const sshProof = $derived.by(() => {
@@ -356,6 +390,13 @@
       {busy}
       onGeneratePassword={() => void setPassword(generateStrongPassword(16))}
       onSetPassword={setPassword}
+      onCopy={copyText}
+    />
+    <ScrcpyCard
+      {status}
+      {busy}
+      onToggleAdb={toggleAdb}
+      onAddAdbKey={addAdbKey}
       onCopy={copyText}
     />
 

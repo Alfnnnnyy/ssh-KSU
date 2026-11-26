@@ -2,5 +2,7 @@ webui/node_modules/
 ctl/target/
 build/
 dist/
+*.zip
+*.apk
 module/bin/
 .DS_Store
