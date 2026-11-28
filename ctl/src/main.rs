@@ -457,6 +457,7 @@ fn start_ssh(paths: &Paths, cfg: &Config) -> Result<(), String> {
         .arg("-P")
         .arg(&paths.ssh_pid)
         .arg("-e")
+        .arg("-T")
         .arg(cfg.max_auth_tries.to_string());
     if !cfg.password_auth {
         cmd.arg("-s");
