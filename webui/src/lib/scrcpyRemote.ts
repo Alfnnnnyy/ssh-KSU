@@ -85,7 +85,7 @@ export async function connectRemoteScreen(
   const target = targetAddress.includes(':') ? targetAddress : `${targetAddress}:5555`;
   onStatus(`Menghubungkan ke ${target}...`);
 
-  const wsUrl = `ws://127.0.0.1:2246/adb?target=${encodeURIComponent(target)}`;
+  const wsUrl = `ws://127.0.0.1:2246/adb?target=${target}`;
   const ws = new WebSocket(wsUrl);
 
   const { promise, resolve, reject } = Promise.withResolvers<void>();

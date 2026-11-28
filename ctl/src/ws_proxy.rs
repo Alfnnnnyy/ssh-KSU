@@ -7,17 +7,38 @@ use std::time::Duration;
 
 const WS_GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
+fn url_decode(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let h1 = chars.next();
+            let h2 = chars.next();
+            if let (Some(c1), Some(c2)) = (h1, h2) {
+                if let Ok(byte) = u8::from_str_radix(&format!("{c1}{c2}"), 16) {
+                    out.push(byte as char);
+                    continue;
+                }
+            }
+        } else if c == '+' {
+            out.push(' ');
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
 fn parse_ws_handshake(reader: &mut BufReader<&mut TcpStream>) -> Option<(String, String)> {
     let mut req_line = String::new();
     reader.read_line(&mut req_line).ok()?;
     let path = req_line.split_whitespace().nth(1)?;
 
-    let target = path
+    let raw_target = path
         .split('?')
         .nth(1)?
         .split('&')
-        .find_map(|pair| pair.strip_prefix("target="))?
-        .to_string();
+        .find_map(|pair| pair.strip_prefix("target="))?;
+    let target = url_decode(raw_target);
 
     let mut ws_key = None;
     loop {
