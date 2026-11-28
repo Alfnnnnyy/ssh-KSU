@@ -72,18 +72,30 @@
 
   function handlePointer(e: PointerEvent, action: 'down' | 'move' | 'up') {
     if (!activeSession) return;
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (action === 'move' && e.buttons === 0) {
+      return;
+    }
+
     const canvas = activeSession.rendererElement;
     const rect = canvas.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return;
 
+    const clientX = Math.min(Math.max(e.clientX, rect.left), rect.right);
+    const clientY = Math.min(Math.max(e.clientY, rect.top), rect.bottom);
+
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
-    const x = (e.clientX - rect.left) * scaleX;
-    const y = (e.clientY - rect.top) * scaleY;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
 
     if (action === 'down') {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {}
     }
     void activeSession.sendTouch(action, x, y);
   }

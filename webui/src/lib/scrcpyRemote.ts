@@ -13,6 +13,8 @@ import {
   AndroidKeyCode,
   AndroidKeyEventAction,
   AndroidMotionEventAction,
+  AndroidMotionEventButton,
+  ScrcpyPointerId,
 } from '@yume-chan/scrcpy';
 import {
   BitmapVideoFrameRenderer,
@@ -204,17 +206,18 @@ export async function connectRemoteScreen(
 
       const px = Math.min(Math.max(0, Math.round(x)), screenWidth);
       const py = Math.min(Math.max(0, Math.round(y)), screenHeight);
+      const isUp = action === 'up';
 
       await controller.injectTouch({
         action: motionAction,
-        pointerId: 0n,
+        pointerId: ScrcpyPointerId.Finger,
         pointerX: px,
         pointerY: py,
         videoWidth: screenWidth,
         videoHeight: screenHeight,
-        pressure: 1,
-        actionButton: 0,
-        buttons: action === 'up' ? 0 : 1,
+        pressure: isUp ? 0 : 1,
+        actionButton: action === 'down' ? AndroidMotionEventButton.Primary : 0,
+        buttons: isUp ? 0 : AndroidMotionEventButton.Primary,
       });
     },
     async sendKey(key) {
@@ -224,40 +227,40 @@ export async function connectRemoteScreen(
         await controller.backOrScreenOn(AndroidKeyEventAction.Up);
       } else if (key === 'home') {
         await controller.injectKeyCode({
-          action: 0,
+          action: AndroidKeyEventAction.Down,
           keyCode: AndroidKeyCode.AndroidHome,
           metaState: 0,
           repeat: 0,
         });
         await controller.injectKeyCode({
-          action: 1,
+          action: AndroidKeyEventAction.Up,
           keyCode: AndroidKeyCode.AndroidHome,
           metaState: 0,
           repeat: 0,
         });
       } else if (key === 'power') {
         await controller.injectKeyCode({
-          action: 0,
+          action: AndroidKeyEventAction.Down,
           keyCode: AndroidKeyCode.Power,
           metaState: 0,
           repeat: 0,
         });
         await controller.injectKeyCode({
-          action: 1,
+          action: AndroidKeyEventAction.Up,
           keyCode: AndroidKeyCode.Power,
           metaState: 0,
           repeat: 0,
         });
       } else if (key === 'recents') {
         await controller.injectKeyCode({
-          action: 0,
-          keyCode: 187, // APP_SWITCH
+          action: AndroidKeyEventAction.Down,
+          keyCode: AndroidKeyCode.AndroidAppSwitch,
           metaState: 0,
           repeat: 0,
         });
         await controller.injectKeyCode({
-          action: 1,
-          keyCode: 187,
+          action: AndroidKeyEventAction.Up,
+          keyCode: AndroidKeyCode.AndroidAppSwitch,
           metaState: 0,
           repeat: 0,
         });
