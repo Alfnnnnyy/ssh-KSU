@@ -14,12 +14,17 @@
   let screenContainer: HTMLDivElement | null = $state(null);
 
   async function handleConnect() {
-    const raw = targetIp.trim();
+    let raw = targetIp.trim();
+    // Auto-extract IP:PORT if user pasted a full command
+    const match = raw.match(/(\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b)/);
+    if (match) {
+      raw = match[1];
+      targetIp = raw;
+    }
     if (!raw) {
-      statusText = 'Masukkan IP target (contoh: 100.x.y.z:5555)';
+      statusText = 'Masukkan IP target (contoh: 100.x.y.z:5555 atau 127.0.0.1:5555)';
       return;
     }
-    connecting = true;
     statusText = 'Menyiapkan koneksi...';
 
     try {
@@ -99,16 +104,33 @@
     </span>
   </div>
 
-  <div class="flex items-center gap-2">
-    <input
-      type="text"
-      bind:value={targetIp}
-      disabled={connecting || activeSession !== null}
-      placeholder="IP HP Target (contoh: 100.80.20.10:5555)"
-      class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-[13px] text-[var(--fg)] disabled:opacity-60"
-    />
-    {#if !activeSession}
-      <button
+  <div class="flex flex-col gap-1.5">
+    <div class="flex items-center justify-between text-xs text-[var(--muted)]">
+      <span>Alamat IP:Port HP Target:</span>
+      {#if !activeSession}
+        <button
+          type="button"
+          disabled={connecting}
+          onclick={() => {
+            targetIp = '127.0.0.1:5555';
+            void handleConnect();
+          }}
+          class="text-[var(--accent)] underline"
+        >
+          Tes Layar HP Ini
+        </button>
+      {/if}
+    </div>
+    <div class="flex items-center gap-2">
+      <input
+        type="text"
+        bind:value={targetIp}
+        disabled={connecting || activeSession !== null}
+        placeholder="contoh: 100.80.20.10:5555 atau 127.0.0.1:5555"
+        class="min-h-11 w-full rounded-[10px] border border-[var(--border)] bg-[var(--bg)] px-3 font-mono text-[13px] text-[var(--fg)] disabled:opacity-60"
+      />
+      {#if !activeSession}
+        <button
         type="button"
         disabled={busy || connecting || !targetIp.trim()}
         onclick={handleConnect}
@@ -125,6 +147,7 @@
         Putus
       </button>
     {/if}
+  </div>
   </div>
 
   {#if statusText}
