@@ -157,8 +157,23 @@ fn init_config(paths: &Paths) {
 
 // --- process inspection via /proc (zero external pgrep) --------------------
 
+fn pid_is_wsproxy(pid: i32) -> bool {
+    let my_pid = std::process::id() as i32;
+    if pid <= 1 || pid == my_pid {
+        return false;
+    }
+    if unsafe { kill(pid, 0) } != 0 {
+        return false;
+    }
+    if let Ok(cmdline) = fs::read_to_string(format!("/proc/{pid}/cmdline")) {
+        return cmdline.contains("wsproxy");
+    }
+    false
+}
+
 fn pid_alive_as(pid: i32, proc_name: &str) -> bool {
-    if pid <= 1 {
+    let my_pid = std::process::id() as i32;
+    if pid <= 1 || pid == my_pid {
         return false;
     }
     if unsafe { kill(pid, 0) } != 0 {
@@ -172,12 +187,22 @@ fn pid_alive_as(pid: i32, proc_name: &str) -> bool {
 }
 
 fn find_proc_pid(pid_file: &Path, proc_name: &str) -> Option<i32> {
+    let my_pid = std::process::id() as i32;
     if let Ok(text) = fs::read_to_string(pid_file) {
         if let Ok(pid) = text.trim().parse::<i32>() {
-            if pid_alive_as(pid, proc_name) {
-                return Some(pid);
+            if pid != my_pid {
+                if proc_name == "rmshctl" {
+                    if pid_is_wsproxy(pid) {
+                        return Some(pid);
+                    }
+                } else if pid_alive_as(pid, proc_name) {
+                    return Some(pid);
+                }
             }
         }
+    }
+    if proc_name == "rmshctl" {
+        return None;
     }
     let Ok(entries) = fs::read_dir("/proc") else {
         return None;
@@ -186,7 +211,7 @@ fn find_proc_pid(pid_file: &Path, proc_name: &str) -> Option<i32> {
         let name = entry.file_name();
         let Some(s) = name.to_str() else { continue };
         let Ok(pid) = s.parse::<i32>() else { continue };
-        if pid_alive_as(pid, proc_name) {
+        if pid != my_pid && pid_alive_as(pid, proc_name) {
             return Some(pid);
         }
     }
